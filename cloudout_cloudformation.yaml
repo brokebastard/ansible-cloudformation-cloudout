@@ -1,0 +1,40 @@
+---
+    - name: Set up CloudOn via CF
+      hosts: localhost
+      gather_facts: no
+      vars:
+        - cf_template: https://cloudformation-templates-rubrik-prod.s3.amazonaws.com/rubrik_cloudout.template
+        - aws_region: us-east-1
+        - s3_bucket_name: zfg-cloudout-use1
+        - iam_username: cloudout-use1
+        - iam_policy_name: cloudout-policy
+        - cf_stack_name: cloudout-use1
+        - archive_location_name: zfg-use1
+      tasks:
+        - name: Create stack and run AWS CloudFormation Template CloudOut to S3
+          register: cloudformation_results
+          cloudformation:
+            stack_name: "{{ cf_stack_name }}"
+            state: present
+            region: "{{ aws_region }}"
+            template_url: "{{ cf_template }}"
+            template_parameters:
+                CreateNewS3Bucket: 'yes'
+                S3BucketName: "{{ s3_bucket_name }}"
+                CreateNewUser: 'yes'
+                IAMUserName: "{{ iam_username }}"
+                UseKMS: 'yes'
+                UserPolicyName: "{{ iam_policy_name }}"
+            tags:
+                Owner: jane.doe
+                Environment: test
+        - name: Configure CloudOn
+          rubrik_aws_s3_cloudout:
+            aws_access_key: "{{ cloudformation_results.stack_outputs.IAMUserAccessKey }}"
+            aws_secret_key: "{{ cloudformation_results.stack_outputs.IAMUserSecretKey }}"            
+            archive_name: "{{ archive_location_name }}"
+            aws_bucket_name: "{{ s3_bucket_name }}"
+            aws_region: "{{ aws_region }}"
+            kms_master_key_id: "{{ cloudformation_results.stack_outputs.KMSKeyId }}"
+        - name: Save IAM credentials to file
+          local_action: copy content="IAM User Access Key{{ ":" }} {{ cloudformation_results.stack_outputs.IAMUserAccessKey }}\nIAM User Secret Key{{ ":" }} {{ cloudformation_results.stack_outputs.IAMUserSecretKey }}\n" dest="./iam-keys.txt"
